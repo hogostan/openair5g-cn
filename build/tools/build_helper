@@ -38,9 +38,63 @@ case "$OS_DISTRO" in
   ubuntu) OS_BASEDISTRO="debian"; INSTALLER="apt-get"; CMAKE="cmake" ;;
 esac
 
-SUPPORTED_KERNEL_VERSION="4.9.0"
+UNSUPPORTED_KERNEL_VERSION="4.8.9999999"
 
 SUDO='sudo -S -E'
+
+
+# vercomp() From https://stackoverflow.com/questions/4023830/how-compare-two-strings-in-dot-separated-version-format-in-bash
+# vercomp licencing: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+# No modification made to original code
+vercomp () {
+    if [[ $1 == $2 ]]
+    then
+        return 0
+    fi
+    local IFS=.
+    local i ver1=($1) ver2=($2)
+    # fill empty fields in ver1 with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+    do
+        ver1[i]=0
+    done
+    for ((i=0; i<${#ver1[@]}; i++))
+    do
+        if [[ -z ${ver2[i]} ]]
+        then
+            # fill empty fields in ver2 with zeros
+            ver2[i]=0
+        fi
+        if ((10#${ver1[i]} > 10#${ver2[i]}))
+        then
+            return 1
+        fi
+        if ((10#${ver1[i]} < 10#${ver2[i]}))
+        then
+            return 2
+        fi
+    done
+    return 0
+}
+
+# vercomp() From https://stackoverflow.com/questions/4023830/how-compare-two-strings-in-dot-separated-version-format-in-bash
+# vercomp licencing: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+# Modification made to original code
+testvercomp () {
+    vercomp $1 $2
+    case $? in
+        0) op='=';;
+        1) op='>';;
+        2) op='<';;
+    esac
+    if [[ $op != $3 ]]
+    then
+        echo_error "FAIL: Expected '$3', Actual '$op', Arg1 '$1', Arg2 '$2'"
+    else
+        echo_success "Pass: '$1 $op $2'"
+    fi
+}
+
 
 ###############################
 ## echo and  family
@@ -391,7 +445,8 @@ install_libgtpnl_from_source() {
     git clone git://git.osmocom.org/libgtpnl
     cd libgtpnl
     git reset --hard 345d687
-    patch --verbose -p1  < $OPENAIRCN_DIR/build/tools/libgtpnl.LTE_dedicated_bearer.v0.patch 
+    # Remove dedicated bearer temporary, waiting for OVS integration in SPGW
+    #patch --verbose -p1  < $OPENAIRCN_DIR/build/tools/libgtpnl.LTE_dedicated_bearer.v0.patch 
     autoreconf -fi
     ./configure
     echo "Compiling libgtpnl"
@@ -640,14 +695,14 @@ install_ovs_from_source(){
   if [[ $prompt =~ [yY](es)* ]]
   then
     cd /usr/local
-    git clone https://gitlab.eurecom.fr/oai/openair-cn-extras.git
+    $SUDO git clone https://gitlab.eurecom.fr/oai/openair-cn-extras.git
 
     cd openair-cn-extras/linux-4.9.0-gtp-module/
-    make
-    make install
-    modprobe udp_tunnel
-    modprobe ip6_udp_tunnel
-    modprobe gtp
+    $SUDO make
+    $SUDO make install
+    $SUDO modprobe udp_tunnel
+    $SUDO modprobe ip6_udp_tunnel
+    $SUDO modprobe gtp
 
     git_username=`git config --get user.name`
     if [ "$git_username" == "" ]; then
@@ -661,22 +716,29 @@ install_ovs_from_source(){
     fi
 
     cd /usr/local
-    git clone https://github.com/openvswitch/ovs.git
+    $SUDO git clone https://github.com/openvswitch/ovs.git
     cd ovs
-    git checkout 31b88c97512b5dca9f1f6f73bb33292618eee88a
-    git am /usr/local/openair-cn-extras/ovs/0001-datapath-GPRS-Tunneling-Protocol-GTP-support.patch
-    git am /usr/local/openair-cn-extras/ovs/0002-userspace-GPRS-Tunneling-Protocol-GTP-support.patch
+    $SUDO git checkout 31b88c97512b5dca9f1f6f73bb33292618eee88a
+    $SUDO git am /usr/local/openair-cn-extras/ovs/0001-datapath-GPRS-Tunneling-Protocol-GTP-support.patch
+    $SUDO git am /usr/local/openair-cn-extras/ovs/0002-userspace-GPRS-Tunneling-Protocol-GTP-support.patch
 
-    ./boot.sh
-    ./configure --with-linux=/lib/modules/`uname -r`/build
-    make -j`nproc`
-    cat /usr/local/openair-cn-extras/linux-4.9.0-gtp-module/Module.symvers >> datapath/linux/Module.symvers
-    make
-    make modules_install  # this overwrites openvswitch.ko, vport.ko, vport-gtp.ko, etc.
-    make install
-    mkdir -p /usr/local/etc/openvswitch
-    mkdir -p /usr/local/var/run/openvswitch
-    ovsdb-tool create /usr/local/etc/openvswitch/conf.db vswitchd/vswitch.ovsschema
+    $SUDO ./boot.sh
+    $SUDO ./configure --with-linux=/lib/modules/`uname -r`/build
+    $SUDO make -j`nproc`
+    if [ -f /usr/src/linux-headers-`uname`r/Module.symvers ]; then
+      cat /usr/src/linux-headers-`uname`r/Module.symvers | $SUDO tee -a datapath/linux/Module.symvers >> /dev/null
+    elif [ -a ]; then
+      cat /usr/src/linux-4.9.51/Module.symvers | $SUDO tee -a datapath/linux/Module.symvers >> /dev/null
+    else
+      echo_error "No valid Module.symvers found for this kernel"
+      exit 1
+    fi
+    $SUDO make
+    $SUDO make modules_install  # this overwrites openvswitch.ko, vport.ko, vport-gtp.ko, etc.
+    $SUDO make install
+    $SUDO mkdir -p /usr/local/etc/openvswitch
+    $SUDO mkdir -p /usr/local/var/run/openvswitch
+    $SUDO ovsdb-tool create /usr/local/etc/openvswitch/conf.db vswitchd/vswitch.ovsschema
   fi
 }
 
@@ -1040,10 +1102,8 @@ check_install_spgw_software() {
   fi
   
   current_kernel_release=`uname -r | cut -d '-' -f1`
-  if [ "$current_kernel_release" != "$SUPPORTED_KERNEL_VERSION" ]; then
-    echo_error "Kernel $SUPPORTED_KERNEL_VERSION is required. Aborting installation"
-    #exit 1
-  fi
+  testvercomp $UNSUPPORTED_KERNEL_VERSION `uname -r` '<'
+
   
   gcc_version=`gcc --version | head -n1 | cut -d" " -f4`
   if ! version_gt $gcc_version $required_gcc_version; then
@@ -1180,6 +1240,7 @@ check_install_spgw_software() {
       check \
       python-dev \
       python-pexpect \
+      python-six \
       unzip"
   elif [[ "$OS_DISTRO" == "rhel" ]] || [[ "$OS_DISTRO" == "centos" ]]; then
     PACKAGE_LIST="\
@@ -1203,7 +1264,8 @@ check_install_spgw_software() {
 
   install_libgtpnl_from_source $1
   install_liblfds7.1.0_from_source $1
-  install_ovs_from_source $1
+  # Remove OVS, waiting for OVS complete integration in SPGW
+  #install_ovs_from_source $1
 }
 
 
