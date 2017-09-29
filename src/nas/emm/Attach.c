@@ -90,8 +90,8 @@
 #include "mme_config.h"
 #include "nas_itti_messaging.h"
 #include "mme_app_defs.h"
-
-
+#include "intertask_interface.h"
+#include "assertions.h"
 /****************************************************************************/
 /****************  E X T E R N A L    D E F I N I T I O N S  ****************/
 /****************************************************************************/
@@ -601,7 +601,17 @@ int emm_proc_attach_complete (
       esm_sap.ue_id = ue_id;
       esm_sap.recv = esm_msg_pP;
       esm_sap.ctx = &ue_mm_context->emm_context;
-      rc = esm_sap_send (&esm_sap);
+      MessageDef *esm_sap_msg_p = itti_alloc_new_message(TASK_EMM_SAP, ESM_SAP_TEST);
+	ESM_DATA_IND(esm_sap_msg_p ).primitive =  ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF;
+	ESM_DATA_IND(esm_sap_msg_p).is_standalone =  false;
+	ESM_DATA_IND(esm_sap_msg_p).ue_id =  ue_id;
+	ESM_DATA_IND(esm_sap_msg_p).recv =  esm_msg_pP;
+	ESM_DATA_IND(esm_sap_msg_p).ctx =  &ue_mm_context->emm_context;
+	int send_res= itti_send_msg_to_task(TASK_ESM_SAP,INSTANCE_DEFAULT,esm_sap_msg_p);	
+
+
+      printf("Get attach message, forward the active default EPS Bearers context accept message to eps session management sublayer---wluhan\n");
+      //rc = esm_sap_send (&esm_sap);
     } else {
       NOT_REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
       OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT " ATTACH COMPLETE discarded (EMM procedure not found)\n", ue_id);
@@ -611,7 +621,8 @@ int emm_proc_attach_complete (
     OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT " ATTACH COMPLETE discarded (context not found)\n", ue_id);
   }
 
-  if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
+//  if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
+	if(1){
     /*
      * Set the network attachment indicator
      */
@@ -1210,8 +1221,18 @@ static int _emm_attach (emm_context_t *emm_context)
       esm_sap.ue_id = ue_id;
       esm_sap.ctx = emm_context;
       esm_sap.recv = attach_proc->ies->esm_msg;
-      rc = esm_sap_send (&esm_sap);
-      if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
+     // rc = esm_sap_send (&esm_sap);
+
+      MessageDef *esm_sap_msg_p = itti_alloc_new_message(TASK_EMM_SAP, ESM_SAP_TEST);
+	ESM_DATA_IND(esm_sap_msg_p ).primitive =  ESM_UNITDATA_IND;
+	ESM_DATA_IND(esm_sap_msg_p).is_standalone =  false;
+	ESM_DATA_IND(esm_sap_msg_p).ue_id =  ue_id;
+	ESM_DATA_IND(esm_sap_msg_p).recv = attach_proc->ies->esm_msg ;
+	ESM_DATA_IND(esm_sap_msg_p).ctx =  emm_context;
+	int send_res= itti_send_msg_to_task(TASK_ESM_SAP,INSTANCE_DEFAULT,esm_sap_msg_p);	
+
+     // if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
+     	if(1){
         rc = RETURNok;
       } else if (esm_sap.err != ESM_SAP_DISCARDED) {
         /*

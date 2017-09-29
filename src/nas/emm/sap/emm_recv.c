@@ -360,6 +360,7 @@ emm_recv_attach_complete (
   /*
    * Execute the attach procedure completion
    */
+  printf("execute the attache procedure completion------wluhan\n");
   rc = emm_proc_attach_complete (ue_id, msg->esmmessagecontainer, *emm_cause, *status);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }

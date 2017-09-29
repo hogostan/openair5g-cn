@@ -105,8 +105,17 @@ _clear_emm_ctxt(emm_context_t *emm_context) {
   esm_sap.ue_id = ue_id;
   esm_sap.ctx = emm_context;
   esm_sap.data.eps_bearer_context_deactivate.ebi = ESM_SAP_ALL_EBI;
-  esm_sap_send (&esm_sap);
-  
+  //esm_sap_send (&esm_sap);
+
+  MessageDef *esm_sap_msg_p = itti_alloc_new_message(TASK_EMM_SAP, ESM_SAP_TEST);
+  ESM_DATA_IND(esm_sap_msg_p ).primitive =  ESM_EPS_BEARER_CONTEXT_DEACTIVATE_REQ;
+  //ESM_DATA_IND(esm_sap_msg_p).is_standalone =  false;
+  ESM_DATA_IND(esm_sap_msg_p).ue_id =  ue_id;
+  //ESM_DATA_IND(esm_sap_msg_p).recv =  esm_msg_pP;
+  ESM_DATA_IND(esm_sap_msg_p).ctx =  emm_context;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_bearer_context_deactivate.ebi = ESM_SAP_ALL_EBI;
+  int send_res= itti_send_msg_to_task(TASK_ESM_SAP,INSTANCE_DEFAULT,esm_sap_msg_p);	
+
   if (emm_context->esm_msg) {
     bdestroy(emm_context->esm_msg);
   }

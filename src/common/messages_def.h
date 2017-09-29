@@ -42,3 +42,4 @@
 #include "udp_messages_def.h"
 #include "mme_app_messages_def.h"
 #include "async_system_messages_def.h"
+#include "esm_messages_def.h"

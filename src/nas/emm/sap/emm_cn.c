@@ -549,15 +549,33 @@ static int _emm_cn_activate_dedicated_bearer_req (emm_cn_activate_dedicated_bear
   esm_sap.data.eps_dedicated_bearer_context_activate.mbr_ul      = msg->bearer_qos.mbr.br_ul;
   esm_sap.data.eps_dedicated_bearer_context_activate.mbr_dl      = msg->bearer_qos.mbr.br_dl;
   // stole ref if any
-  msg->tft = NULL;
   esm_sap.data.eps_dedicated_bearer_context_activate.pco         = msg->pco;
   // stole ref if any
-  msg->pco = NULL;
-
   MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REQ ue id " MME_UE_S1AP_ID_FMT " ebi %u",
       esm_sap.ue_id,esm_sap.data.eps_dedicated_bearer_context_activate.ebi);
 
-  rc = esm_sap_send (&esm_sap);
+  //rc = esm_sap_send (&esm_sap);
+  MessageDef *esm_sap_msg_p = itti_alloc_new_message(TASK_EMM_SAP, ESM_SAP_TEST);
+  ESM_DATA_IND(esm_sap_msg_p ).primitive =  ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REQ;
+  ESM_DATA_IND(esm_sap_msg_p).is_standalone =  true;
+  ESM_DATA_IND(esm_sap_msg_p).ue_id =  msg->ue_id;
+  //ESM_DATA_IND(esm_sap_msg_p).recv =  esm_msg_pP;
+  ESM_DATA_IND(esm_sap_msg_p).ctx =  &ue_mm_context->emm_context;
+
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.cid         = msg->cid;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.ebi         = msg->ebi;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.linked_ebi  = msg->linked_ebi;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.tft         = msg->tft;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.qci         = msg->bearer_qos.qci;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.gbr_ul      = msg->bearer_qos.gbr.br_ul;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.gbr_dl      = msg->bearer_qos.gbr.br_dl;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.mbr_ul      = msg->bearer_qos.mbr.br_ul;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.mbr_dl      = msg->bearer_qos.mbr.br_dl;
+  ESM_DATA_IND(esm_sap_msg_p).data.eps_dedicated_bearer_context_activate.pco 	     = msg->pco;
+  int send_res= itti_send_msg_to_task(TASK_ESM_SAP,INSTANCE_DEFAULT,esm_sap_msg_p);
+
+  msg->pco = NULL;
+  msg->tft = NULL;
 
   unlock_ue_contexts(ue_mm_context);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);

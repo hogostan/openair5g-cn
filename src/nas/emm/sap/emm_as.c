@@ -416,6 +416,7 @@ static int _emm_as_recv (
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
     }
 
+    printf("Get Attach Complete message in _emm_as_recv function---wluhan\n");
     rc = emm_recv_attach_complete (ue_id, &emm_msg->attach_complete, emm_cause, decode_status);
     break;
 

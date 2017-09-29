@@ -307,8 +307,17 @@ int lowerlayer_data_ind (mme_ue_s1ap_id_t ue_id, const_bstring    data)
   esm_sap.ue_id = ue_id;
   esm_sap.ctx = &ue_mm_context->emm_context;
   esm_sap.recv = data;
+  //rc = esm_sap_send (&esm_sap);
+
+  MessageDef *esm_sap_msg_p = itti_alloc_new_message(TASK_EMM_SAP, ESM_SAP_TEST);
+  ESM_DATA_IND(esm_sap_msg_p ).primitive = ESM_UNITDATA_IND ;
+  ESM_DATA_IND(esm_sap_msg_p).is_standalone =  true;
+  ESM_DATA_IND(esm_sap_msg_p).ue_id =  ue_id;
+  ESM_DATA_IND(esm_sap_msg_p).recv =  data;
+  ESM_DATA_IND(esm_sap_msg_p).ctx =  &ue_mm_context->emm_context;
+  int send_res= itti_send_msg_to_task(TASK_ESM_SAP,INSTANCE_DEFAULT,esm_sap_msg_p);
   data = NULL;
-  rc = esm_sap_send (&esm_sap);
+
   unlock_ue_contexts(ue_mm_context);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }

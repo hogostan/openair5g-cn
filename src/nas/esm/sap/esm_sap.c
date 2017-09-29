@@ -63,7 +63,8 @@
 #include "esm_msg.h"
 #include "esm_cause.h"
 #include "esm_proc.h"
-
+#include "intertask_interface.h"
+#include "assertions.h"
 
 /****************************************************************************/
 /****************  E X T E R N A L    D E F I N I T I O N S  ****************/
@@ -162,153 +163,319 @@ esm_sap_initialize (
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-int
-esm_sap_send (esm_sap_t * msg)
+void * esm_sap_message_process(__attribute__((unused)) void *args)
 {
-  OAILOG_FUNC_IN (LOG_NAS_ESM);
-  int                                     rc = RETURNerror;
-  pdn_cid_t                               pid = MAX_APN_PER_UE;
+        itti_mark_task_ready (TASK_ESM_SAP);
 
-  /*
-   * Check the ESM-SAP primitive
-   */
-  esm_primitive_t                         primitive = msg->primitive;
+  	//OAILOG_FUNC_RETURN (LOG_NAS_ESM, rc);
 
-  assert ((primitive > ESM_START) && (primitive < ESM_END));
-  OAILOG_INFO (LOG_NAS_ESM, "ESM-SAP   - Received primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
+ 	 OAILOG_FUNC_IN (LOG_NAS_ESM);
+ 	 int                                     rc = RETURNerror;
+ 	 pdn_cid_t                               pid = MAX_APN_PER_UE;
+	 
+        while(1){
+                printf("in receiving message----\n");
+                MessageDef *received_message_p = NULL;
+                itti_receive_msg (TASK_ESM_SAP, &received_message_p);
+                DevAssert (received_message_p != NULL);
+		printf("Already get a message from TASK ESM SAP !!--wluhan\n");                 
+ 		 /*
+ 		  * Check the ESM-SAP primitive
+ 		  */
+ 		 esm_primitive_t                  primitive = ESM_DATA_IND(received_message_p).primitive;
+		 esm_sap_test_t * msg=&(ESM_DATA_IND(received_message_p));
 
-  switch (primitive) {
-  case ESM_PDN_CONNECTIVITY_REQ:
-    /*
-     * The MME received a PDN connectivity request message
-     */
-    rc = _esm_sap_recv (PDN_CONNECTIVITY_REQUEST, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
-    break;
+ 		 assert ((primitive > ESM_START) && (primitive < ESM_END));
+ 		 OAILOG_INFO (LOG_NAS_ESM, "ESM-SAP   - Received primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
 
-  case ESM_PDN_CONNECTIVITY_REJ:
-    /*
-     * PDN connectivity locally failed
-     */
-    rc = esm_proc_default_eps_bearer_context_failure (msg->ctx, &pid);
+		 
+		  switch (primitive) {
+		  case ESM_PDN_CONNECTIVITY_REQ:
+		    /*
+		     * The MME received a PDN connectivity request message
+		     */
+		    rc = _esm_sap_recv (PDN_CONNECTIVITY_REQUEST, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+		    break;
+		
+		  case ESM_PDN_CONNECTIVITY_REJ:
+		    /*
+		     * PDN connectivity locally failed
+		     */
+		    rc = esm_proc_default_eps_bearer_context_failure (msg->ctx, &pid);
+		
+		    if (rc != RETURNerror) {
+		      rc = esm_proc_pdn_connectivity_failure (msg->ctx, pid);
+		    }
+		
+		    break;
+		
+		  case ESM_PDN_DISCONNECT_REQ:
+		    break;
+		
+		  case ESM_PDN_DISCONNECT_REJ:
+		    break;
+		
+		  case ESM_BEARER_RESOURCE_ALLOCATE_REQ:
+		    break;
+		
+		  case ESM_BEARER_RESOURCE_ALLOCATE_REJ:
+		    break;
+		
+		  case ESM_BEARER_RESOURCE_MODIFY_REQ:
+		    break;
+		
+		  case ESM_BEARER_RESOURCE_MODIFY_REJ:
+		    break;
+		
+		  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REQ:
+		    break;
+		
+		  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
+		    /*
+		     * The MME received activate default ESP bearer context accept
+		     */
+		    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_ACCEPT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+		    break;
+		
+		  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
+		    /*
+		     * The MME received activate default ESP bearer context reject
+		     */
+		    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REJECT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+		    break;
+		
+		  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REQ: {
+		      esm_eps_dedicated_bearer_context_activate_t* bearer_activate = &msg->data.eps_dedicated_bearer_context_activate;
+		      if (msg->is_standalone) {
+		        esm_cause_t esm_cause;
+		        rc = esm_proc_dedicated_eps_bearer_context (msg->ctx,
+		            0,
+		            bearer_activate->cid,
+		            &bearer_activate->ebi,
+		            &bearer_activate->linked_ebi,
+		            bearer_activate->qci,
+		            bearer_activate->gbr_dl,
+		            bearer_activate->gbr_ul,
+		            bearer_activate->mbr_dl,
+		            bearer_activate->mbr_ul,
+		            bearer_activate->tft,
+		            bearer_activate->pco,
+		            &esm_cause);
+		        if (rc != RETURNok) {
+		          break;
+		        }
+		        /* Send PDN connectivity request */
+		
+		        rc = _esm_sap_send(ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REQUEST,
+		            msg->is_standalone, msg->ctx, (proc_tid_t)0 , bearer_activate->ebi,
+		            &msg->data, msg->send);
+		      }
+		    }
+		    break;
+		
+		  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
+		    break;
+		
+		  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
+		    break;
+		
+		  case ESM_EPS_BEARER_CONTEXT_MODIFY_REQ:
+		    break;
+		
+		  case ESM_EPS_BEARER_CONTEXT_MODIFY_CNF:
+		    break;
+		
+		  case ESM_EPS_BEARER_CONTEXT_MODIFY_REJ:
+		    break;
+		
+		  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_REQ:{
+		      int                                     bid = BEARERS_PER_UE;
+		
+		      /*
+		       * Locally deactivate EPS bearer context
+		       */
+		      rc = esm_proc_eps_bearer_context_deactivate (msg->ctx, true, msg->data.eps_bearer_context_deactivate.ebi, &pid, &bid, NULL);
+		
+		      // TODO Assertion bellow is not true now:
+		      // If only default bearer is supported then release PDN connection as well - Implicit Detach
+		      _pdn_connectivity_delete (msg->ctx, pid);
+		      
+		    }
+		    break;
+		
+		  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_CNF:
+		    break;
+		
+		  case ESM_UNITDATA_IND:
+		    rc = _esm_sap_recv (-1, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+		    break;
+		
+		  default:
+		    break;
+		  }
+		
+                itti_free (ITTI_MSG_ORIGIN_ID (received_message_p), received_message_p);
+                received_message_p = NULL;
+																    }
 
-    if (rc != RETURNerror) {
-      rc = esm_proc_pdn_connectivity_failure (msg->ctx, pid);
-    }
 
-    break;
 
-  case ESM_PDN_DISCONNECT_REQ:
-    break;
-
-  case ESM_PDN_DISCONNECT_REJ:
-    break;
-
-  case ESM_BEARER_RESOURCE_ALLOCATE_REQ:
-    break;
-
-  case ESM_BEARER_RESOURCE_ALLOCATE_REJ:
-    break;
-
-  case ESM_BEARER_RESOURCE_MODIFY_REQ:
-    break;
-
-  case ESM_BEARER_RESOURCE_MODIFY_REJ:
-    break;
-
-  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REQ:
-    break;
-
-  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
-    /*
-     * The MME received activate default ESP bearer context accept
-     */
-    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_ACCEPT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
-    break;
-
-  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
-    /*
-     * The MME received activate default ESP bearer context reject
-     */
-    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REJECT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
-    break;
-
-  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REQ: {
-      esm_eps_dedicated_bearer_context_activate_t* bearer_activate = &msg->data.eps_dedicated_bearer_context_activate;
-      if (msg->is_standalone) {
-        esm_cause_t esm_cause;
-        rc = esm_proc_dedicated_eps_bearer_context (msg->ctx,
-            0,
-            bearer_activate->cid,
-            &bearer_activate->ebi,
-            &bearer_activate->linked_ebi,
-            bearer_activate->qci,
-            bearer_activate->gbr_dl,
-            bearer_activate->gbr_ul,
-            bearer_activate->mbr_dl,
-            bearer_activate->mbr_ul,
-            bearer_activate->tft,
-            bearer_activate->pco,
-            &esm_cause);
-        if (rc != RETURNok) {
-          break;
-        }
-        /* Send PDN connectivity request */
-
-        rc = _esm_sap_send(ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REQUEST,
-            msg->is_standalone, msg->ctx, (proc_tid_t)0 , bearer_activate->ebi,
-            &msg->data, msg->send);
-      }
-    }
-    break;
-
-  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
-    break;
-
-  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
-    break;
-
-  case ESM_EPS_BEARER_CONTEXT_MODIFY_REQ:
-    break;
-
-  case ESM_EPS_BEARER_CONTEXT_MODIFY_CNF:
-    break;
-
-  case ESM_EPS_BEARER_CONTEXT_MODIFY_REJ:
-    break;
-
-  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_REQ:{
-      int                                     bid = BEARERS_PER_UE;
-
-      /*
-       * Locally deactivate EPS bearer context
-       */
-      rc = esm_proc_eps_bearer_context_deactivate (msg->ctx, true, msg->data.eps_bearer_context_deactivate.ebi, &pid, &bid, NULL);
-
-      // TODO Assertion bellow is not true now:
-      // If only default bearer is supported then release PDN connection as well - Implicit Detach
-      _pdn_connectivity_delete (msg->ctx, pid);
-      
-    }
-    break;
-
-  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_CNF:
-    break;
-
-  case ESM_UNITDATA_IND:
-    rc = _esm_sap_recv (-1, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
-    break;
-
-  default:
-    break;
-  }
-
-  if (rc != RETURNok) {
-    OAILOG_ERROR (LOG_NAS_ESM, "ESM-SAP   - Failed to process primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
-  }
-
-  OAILOG_FUNC_RETURN (LOG_NAS_ESM, rc);
+//  if (rc != RETURNok) {
+//    OAILOG_ERROR (LOG_NAS_ESM, "ESM-SAP   - Failed to process primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
+//  }
+//
 }
 
+//int
+//esm_sap_send (esm_sap_t * msg)
+//{
+//  OAILOG_FUNC_IN (LOG_NAS_ESM);
+//  int                                     rc = RETURNerror;
+//  pdn_cid_t                               pid = MAX_APN_PER_UE;
+//
+//  /*
+//   * Check the ESM-SAP primitive
+//   */
+//  esm_primitive_t                         primitive = msg->primitive;
+//
+//  assert ((primitive > ESM_START) && (primitive < ESM_END));
+//  OAILOG_INFO (LOG_NAS_ESM, "ESM-SAP   - Received primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
+//  
+//  switch (primitive) {
+//  case ESM_PDN_CONNECTIVITY_REQ:
+//    /*
+//     * The MME received a PDN connectivity request message
+//     */
+//    OAILOG_INFO(LOG_NAS_ESM,"Get a PDN connectivity request message ----wluhan\n");
+//    rc = _esm_sap_recv (PDN_CONNECTIVITY_REQUEST, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+//    break;
+//
+//  case ESM_PDN_CONNECTIVITY_REJ:
+//    /*
+//     * PDN connectivity locally failed
+//     */
+//    rc = esm_proc_default_eps_bearer_context_failure (msg->ctx, &pid);
+//
+//    if (rc != RETURNerror) {
+//      rc = esm_proc_pdn_connectivity_failure (msg->ctx, pid);
+//    }
+//
+//    break;
+//
+//  case ESM_PDN_DISCONNECT_REQ:
+//    break;
+//
+//  case ESM_PDN_DISCONNECT_REJ:
+//    break;
+//
+//  case ESM_BEARER_RESOURCE_ALLOCATE_REQ:
+//    break;
+//
+//  case ESM_BEARER_RESOURCE_ALLOCATE_REJ:
+//    break;
+//
+//  case ESM_BEARER_RESOURCE_MODIFY_REQ:
+//    break;
+//
+//  case ESM_BEARER_RESOURCE_MODIFY_REJ:
+//    break;
+//
+//  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REQ:
+//    break;
+//
+//  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
+//    /*
+//     * The MME received activate default ESP bearer context accept
+//     */
+//
+//    OAILOG_INFO(LOG_NAS_ESM,"Get a default ESP bearer context accept message ----wluhan\n");
+//    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_ACCEPT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+//    break;
+//
+//  case ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
+//    /*
+//     * The MME received activate default ESP bearer context reject
+//     */
+//    rc = _esm_sap_recv (ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REJECT, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+//    break;
+//
+//  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REQ: {
+//      esm_eps_dedicated_bearer_context_activate_t* bearer_activate = &msg->data.eps_dedicated_bearer_context_activate;
+//      if (msg->is_standalone) {
+//        esm_cause_t esm_cause;
+//        rc = esm_proc_dedicated_eps_bearer_context (msg->ctx,
+//            0,
+//            bearer_activate->cid,
+//            &bearer_activate->ebi,
+//            &bearer_activate->linked_ebi,
+//            bearer_activate->qci,
+//            bearer_activate->gbr_dl,
+//            bearer_activate->gbr_ul,
+//            bearer_activate->mbr_dl,
+//            bearer_activate->mbr_ul,
+//            bearer_activate->tft,
+//            bearer_activate->pco,
+//            &esm_cause);
+//        if (rc != RETURNok) {
+//          break;
+//        }
+//        /* Send PDN connectivity request */
+//
+//        rc = _esm_sap_send(ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REQUEST,
+//            msg->is_standalone, msg->ctx, (proc_tid_t)0 , bearer_activate->ebi,
+//            &msg->data, msg->send);
+//      }
+//    }
+//    break;
+//
+//  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_CNF:
+//    break;
+//
+//  case ESM_DEDICATED_EPS_BEARER_CONTEXT_ACTIVATE_REJ:
+//    break;
+//
+//  case ESM_EPS_BEARER_CONTEXT_MODIFY_REQ:
+//    break;
+//
+//  case ESM_EPS_BEARER_CONTEXT_MODIFY_CNF:
+//    break;
+//
+//  case ESM_EPS_BEARER_CONTEXT_MODIFY_REJ:
+//    break;
+//
+//  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_REQ:{
+//      int                                     bid = BEARERS_PER_UE;
+//
+//      /*
+//       * Locally deactivate EPS bearer context
+//       */
+//      rc = esm_proc_eps_bearer_context_deactivate (msg->ctx, true, msg->data.eps_bearer_context_deactivate.ebi, &pid, &bid, NULL);
+//
+//      // TODO Assertion bellow is not true now:
+//      // If only default bearer is supported then release PDN connection as well - Implicit Detach
+//      _pdn_connectivity_delete (msg->ctx, pid);
+//      
+//    }
+//    break;
+//
+//  case ESM_EPS_BEARER_CONTEXT_DEACTIVATE_CNF:
+//    break;
+//
+//  case ESM_UNITDATA_IND:
+//    rc = _esm_sap_recv (-1, msg->is_standalone, msg->ctx, msg->recv, msg->send, &msg->err);
+//    break;
+//
+//  default:
+//    break;
+//  }
+//
+//  if (rc != RETURNok) {
+//    OAILOG_ERROR (LOG_NAS_ESM, "ESM-SAP   - Failed to process primitive %s (%d)\n", _esm_sap_primitive_str[primitive - ESM_START - 1], primitive);
+//  }
+//
+//  OAILOG_FUNC_RETURN (LOG_NAS_ESM, rc);
+//}
+//
 /****************************************************************************/
 /*********************  L O C A L    F U N C T I O N S  *********************/
 /****************************************************************************/
